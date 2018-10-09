@@ -92,39 +92,47 @@ let moves g =
   in aux (get_balls g) []
 
 let apply_move g move =
-  let (b,dir) = move in
-  let rec apply_move_aux g b dir first =
-    let game_moves = moves g in
+  let rec apply_move_aux g move first =
     print_game g;
-    print_moves game_moves;
-    if List.mem (make_move b dir) game_moves then
-      let rec get_ball_to_move g b dir balls acc =
-        match balls with
-        | [] -> failwith "No ball to move"
-        | h::t when eq_ball h b -> debug " > found ball to move" ; find_pos g b dir (acc @ balls)
-        | h::t -> get_ball_to_move g b dir t (h::acc)
+    print_moves (moves g);
+    let (b, dir) = move in
+    let rec get_ball_to_move g b dir balls acc = match balls with
+      | [] -> failwith "No ball to move"
+      | h::t when eq_ball h b -> debug " > found ball to move" ; find_pos g b dir (acc @ balls)
+      | h::t -> get_ball_to_move g b dir t (h::acc)
 
-      and find_pos g b dir balls =
-        let (id,p) = b in
-        let rec find_new_pos g f p balls = match f p with
-          | pos when (is_ball g pos) -> debug " > found ball to kill" ; let b1 = ball_of_position g pos in apply_move_aux (new_game ((id,p)::(remove_ball b balls []))) b1 dir false
-          | pos -> debug (Position.string_of_position pos) ; find_new_pos g f (f p) balls
+    and find_pos g b dir balls =
+      let (id,p) = b in
+      let rec find_new_pos g f p balls = match f p with
+        | pos when (is_ball g pos) -> begin
+            debug " > found ball to kill" ;
+            let old_pos = position_of_ball b in
+            if first && (max (abs (Position.proj_x old_pos - Position.proj_x pos)) (abs (Position.proj_y old_pos - Position.proj_y pos)) < 2) then begin debug "first"; g end
+            else
+              let b1 = ball_of_position g pos in
+              apply_move_aux (new_game ((id,p)::(remove_ball b balls []))) (make_move b1 dir) false
+        end
+        | pos -> begin
+            debug (Position.string_of_position pos) ;
+            let x = Position.proj_x pos and y = Position.proj_y pos in
+            if min x y < 0 || max x y > 15 then
+              if first then g
+              else new_game (remove_ball b balls [])
+            else find_new_pos g f (f p) balls
+        end
 
-        and fun_of_dir d = match d with
-          | Up -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p + 1)
-          | Down -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p - 1)
-          | Left -> fun p -> Position.from_int (Position.proj_x p - 1) (Position.proj_y p)
-          | Right -> fun p -> Position.from_int (Position.proj_x p + 1) (Position.proj_y p)
+      and fun_of_dir d = match d with
+        | Up -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p + 1)
+        | Down -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p - 1)
+        | Left -> fun p -> Position.from_int (Position.proj_x p - 1) (Position.proj_y p)
+        | Right -> fun p -> Position.from_int (Position.proj_x p + 1) (Position.proj_y p)
 
       in find_new_pos g (fun_of_dir dir) p balls
 
+    and remove_ball b balls acc = match balls with
+      | [] -> acc
+      | h::t -> if eq_ball h b then remove_ball b t acc else remove_ball b t (h::acc)
+
     in get_ball_to_move g b dir (get_balls g) []
-  else
-  if first then g
-  else new_game (remove_ball b (get_balls g) [])
 
-  and remove_ball b balls acc = match balls with
-    | [] -> acc
-    | h::t -> if eq_ball h b then remove_ball b t acc else remove_ball b t (h::acc)
-
-  in apply_move_aux g b dir true
+  in apply_move_aux g move true
