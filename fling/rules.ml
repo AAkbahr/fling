@@ -92,43 +92,59 @@ let moves g =
   in aux (get_balls g) []
 
 let apply_move g move =
+  (* returns a game where [move] has been applied to [g] taking into account whether [move] has been chosen by the player ([first] = true) or if it is a side effect *)
   let rec apply_move_aux g move first =
     print_game g;
     print_moves (moves g);
     let (b, dir) = move in
+
+    (* finds the ball the move is supposed to be applied to *)
     let rec get_ball_to_move g b dir balls acc = match balls with
       | [] -> failwith "No ball to move"
       | h::t when eq_ball h b -> debug " > found ball to move" ; find_pos g b dir (acc @ balls)
       | h::t -> get_ball_to_move g b dir t (h::acc)
 
+    (* finds the position the moving ball is supposed to go *)
     and find_pos g b dir balls =
       let (id,p) = b in
+      (* explores the grid until another ball or the bounds of the grid are found *)
       let rec find_new_pos g f p balls = match f p with
+        (* if another ball is found on ball's trajectory *)
         | pos when (is_ball g pos) -> begin
             debug " > found ball to kill" ;
             let old_pos = position_of_ball b in
+            (* if a ball is thrown directly on one of its neighbors, nothing happens *)
             if first && (max (abs (Position.proj_x old_pos - Position.proj_x pos)) (abs (Position.proj_y old_pos - Position.proj_y pos)) < 2) then begin debug "first"; g end
+
+            (* otherwise the ball stops and the move is recursively applied to the rammed ball *)
             else
               let b1 = ball_of_position g pos in
               apply_move_aux (new_game ((id,p)::(remove_ball b balls []))) (make_move b1 dir) false
-        end
+          end
+
         | pos -> begin
             debug (Position.string_of_position pos) ;
             let x = Position.proj_x pos and y = Position.proj_y pos in
+            (* if the ball's trajectory ends out of the grid... *)
             if min x y < 0 || max x y > 15 then
+              (* nothing happens if the player tries to eject directly the ball *)
               if first then g
+              (* if a rammed ball is supposed to disappear, it is just removed from the list of balls *)
               else new_game (remove_ball b balls [])
+            (* if nothing special is found, the ball's trajectory is recursively explored *)
             else find_new_pos g f (f p) balls
         end
 
-      and fun_of_dir d = match d with
-        | Up -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p + 1)
-        | Down -> fun p -> Position.from_int (Position.proj_x p) (Position.proj_y p - 1)
-        | Left -> fun p -> Position.from_int (Position.proj_x p - 1) (Position.proj_y p)
-        | Right -> fun p -> Position.from_int (Position.proj_x p + 1) (Position.proj_y p)
+      (* this function transposes the concept of direction in terms of positions *)
+      and fun_of_dir d p = match d with
+        | Up -> Position.from_int (Position.proj_x p) (Position.proj_y p + 1)
+        | Down -> Position.from_int (Position.proj_x p) (Position.proj_y p - 1)
+        | Left -> Position.from_int (Position.proj_x p - 1) (Position.proj_y p)
+        | Right -> Position.from_int (Position.proj_x p + 1) (Position.proj_y p)
 
       in find_new_pos g (fun_of_dir dir) p balls
 
+    (* removes the ball [b] from ball list [balls] *)
     and remove_ball b balls acc = match balls with
       | [] -> acc
       | h::t -> if eq_ball h b then remove_ball b t acc else remove_ball b t (h::acc)
